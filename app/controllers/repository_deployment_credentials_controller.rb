@@ -73,7 +73,7 @@ class RepositoryDeploymentCredentialsController < RedmineGitHostingController
       rescue ActiveRecord::RecordNotFound => e
         render_404
       else
-        if credential.user && (User.current.admin? || credential.user == User.current)
+        if credential.user && (User.current.admin? || User.current.allowed_to?(:manage_repository, @project) || credential.user == User.current)
           @credential = credential
         else
           render_403
@@ -84,7 +84,7 @@ class RepositoryDeploymentCredentialsController < RedmineGitHostingController
 
     def find_key
       key = @credential.gitolite_public_key
-      if key && key.user && (User.current.admin? || key.user == User.current)
+      if key && key.user && (User.current.admin? || User.current.allowed_to?(:manage_repository, @project) || key.user == User.current)
         @key = key
       elsif key
         render_403
@@ -99,8 +99,8 @@ class RepositoryDeploymentCredentialsController < RedmineGitHostingController
       @user_keys     = User.current.gitolite_public_keys.deploy_key.order('title ASC')
       @disabled_keys = @repository.deployment_credentials.map(&:gitolite_public_key)
       @other_keys    = []
-      # Admin can use other's deploy keys as well
-      @other_keys    = other_deployment_keys if User.current.admin?
+      # Managers and admins can use other's deploy keys as well
+      @other_keys    = other_deployment_keys if (User.current.admin? || User.current.allowed_to?(:manage_repository, @project))
     end
 
 
@@ -126,8 +126,8 @@ class RepositoryDeploymentCredentialsController < RedmineGitHostingController
 
       credential.gitolite_public_key = key if !key.nil?
 
-      # If admin, let credential be owned by owner of key...
-      if User.current.admin?
+      # If admin or manager, let credential be owned by owner of key...
+      if (User.current.admin? || User.current.allowed_to?(:manage_repository, @project))
         credential.user = key.user if !key.nil?
       else
         credential.user = User.current
